@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #gameContainer {
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 20px auto;
+        }
+        #startMenu, #gameOverMenu, #levelCompleteMenu {
+            margin-bottom: 20px;
+        }
+        button {
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        #controls {
+            margin-top: 20px;
+        }
+        #highScores {
+            margin-top: 20px;
+        }
+        #highScores ul{
+            list-style: upper-latin;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="startMenu">
+            <h2>Select Difficulty:</h2>
+            <button onclick="setDifficulty('easy')">Easy</button>
+            <button onclick="setDifficulty('medium')">Medium</button>
+            <button onclick="setDifficulty('hard')">Hard</button>
+            <br><br>
+            <button id="startButton" onclick="startGame()" disabled>Start Game</button>
+            <div id="highScores">
+                <h3>High Scores</h3>
+                <ul id="scoreList"></ul>
+            </div>
+        </div>
+        <canvas id="gameCanvas" width="400" height="600" style="display: none;"></canvas>
+        <div id="controls" style="display: none;">
+            <button onmousedown="controlBird('up')" onmouseup="controlBird('release')" ontouchstart="controlBird('up')" ontouchend="controlBird('release')">Up</button>
+            <button onmousedown="controlBird('down')" onmouseup="controlBird('release')" ontouchstart="controlBird('down')" ontouchend="controlBird('release')">Down</button>
+        </div>
+        <div id="gameOverMenu" style="display: none;">
+            <h2>Game Over</h2>
+            <p>Score: <span id="finalScore"></span></p>
+            <button onclick="playAgain()">Play Again</button>
+            <button onclick="goHome()">Home</button>
+        </div>
+        <div id="levelCompleteMenu" style="display: none;">
+            <h2>Level Complete!</h2>
+            <p>Score: <span id="levelScore"></span></p>
+            <button onclick="nextLevel()">Next Level</button>
+            <button onclick="goHome()">Home</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startMenu = document.getElementById('startMenu');
+        const gameOverMenu = document.getElementById('gameOverMenu');
+        const levelCompleteMenu = document.getElementById('levelCompleteMenu');
+        const controlsDiv = document.getElementById('controls');
+        const startButton = document.getElementById('startButton');
+        const scoreList = document.getElementById('scoreList');
+
+        let difficulty = '';
+        let gameSpeed;
+        let gravityStrength;
+        let jumpStrength;
+        let birdSpeed;
+        let highScores = [];
+        let currentLevel = 1;
+        let pillarsPerLevel = 100;
+        let pipeSpacing = 300; // Space between pipes
+
+        // Bird
+        let bird = {
+            x: 50,
+            y: 300,
+            velocity: 0,
+            gravity: 0.5,
+            jump: -10,
+            radius: 10
+        };
+
+        // Pipes
+        let pipes = [];
+        const pipeWidth = 50;
+        const pipeGap = 150;
+
+        // Game state
+        let score = 0;
+        let gameOver = false;
+        let gameStarted = false;
+
+        function setDifficulty(level) {
+            difficulty = level;
+            startButton.disabled = false;
+            switch(level) {
+                case 'easy':
+                    gameSpeed = 1.5;
+                    gravityStrength = 0.4;
+                    jumpStrength = -8;
+                    birdSpeed = 1;
+                    pillarsPerLevel = 100;
+                    break;
+                case 'medium':
+                    gameSpeed = 2;
+                    gravityStrength = 0.5;
+                    jumpStrength = -10;
+                    birdSpeed = 1.5;
+                    pillarsPerLevel = 150;
+                    break;
+                case 'hard':
+                    gameSpeed = 2.5;
+                    gravityStrength = 0.6;
+                    jumpStrength = -12;
+                    birdSpeed = 2;
+                    pillarsPerLevel = 200;
+                    break;
+            }
+        }
+
+        function startGame() {
+            gameStarted = true;
+            startMenu.style.display = 'none';
+            canvas.style.display = 'block';
+            controlsDiv.style.display = 'block';
+            bird.gravity = gravityStrength;
+            bird.jump = jumpStrength;
+            resetLevel();
+            gameLoop();
+        }
+
+        function resetLevel() {
+            bird.x = 50;
+            bird.y = 300;
+            bird.velocity = 0;
+            pipes = [];
+            score = 0;
+            gameOver = false;
+            generatePipes();
+        }
+
+        function generatePipes() {
+            for (let i = 0; i < pillarsPerLevel; i++) {
+                let pipeY = Math.random() * (canvas.height - pipeGap - 100) + 50;
+                pipes.push({
+                    x: canvas.width + i * pipeSpacing,
+                    top: pipeY,
+                    bottom: pipeY + pipeGap,
+                    passed: false
+                });
+            }
+        }
+
+        function drawBird() {
+            ctx.beginPath();
+            ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'yellow';
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPipes() {
+            pipes.forEach(pipe => {
+                ctx.fillStyle = 'green';
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.top);
+                ctx.fillRect(pipe.x, pipe.bottom, pipeWidth, canvas.height - pipe.bottom);
+            });
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 30);
+            ctx.fillText(`Level: ${currentLevel}`, 10, 60);
+        }
+
+        function update() {
+            if (gameOver || !gameStarted) return;
+
+            // Update bird position
+            bird.velocity += bird.gravity;
+            bird.y += bird.velocity;
+
+            // Check collisions
+            if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) {
+                endGame();
+            }
+
+            pipes.forEach(pipe => {
+                if (bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + pipeWidth) {
+                    if (bird.y - bird.radius < pipe.top || bird.y + bird.radius > pipe.bottom) {
+                        endGame();
+                    }
+                }
+
+                if (pipe.x + pipeWidth < bird.x && !pipe.passed) {
+                    score++;
+                    pipe.passed = true;
+                }
+
+                pipe.x -= gameSpeed;
+            });
+
+            // Remove off-screen pipes
+            pipes = pipes.filter(pipe => pipe.x + pipeWidth > -100);
+
+            // Check if level is complete
+            if (pipes.length === 0) {
+                completeLevel();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBird();
+            drawPipes();
+            drawScore();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function controlBird(action) {
+            if (action === 'up') {
+                bird.velocity = bird.jump;
+            } else if (action === 'down') {
+                bird.velocity = -bird.jump / 2;
+            }
+        }
+
+        function endGame() {
+            gameOver = true;
+            gameStarted = false;
+            canvas.style.display = 'none';
+            controlsDiv.style.display = 'none';
+            gameOverMenu.style.display = 'block';
+            document.getElementById('finalScore').textContent = score;
+            updateHighScores();
+        }
+
+        function completeLevel() {
+            gameStarted = false;
+            canvas.style.display = 'none';
+            controlsDiv.style.display = 'none';
+            levelCompleteMenu.style.display = 'block';
+            document.getElementById('levelScore').textContent = score;
+        }
+
+        function playAgain() {
+            currentLevel = 1;
+            resetLevel();
+            gameOverMenu.style.display = 'none';
+            canvas.style.display = 'block';
+            controlsDiv.style.display = 'block';
+            gameStarted = true;
+            gameLoop();
+        }
+
+        function nextLevel() {
+            currentLevel++;
+            resetLevel();
+            levelCompleteMenu.style.display = 'none';
+            canvas.style.display = 'block';
+            controlsDiv.style.display = 'block';
+            gameStarted = true;
+            gameLoop();
+        }
+
+        function goHome() {
+            currentLevel = 1;
+            resetLevel();
+            gameOverMenu.style.display = 'none';
+            levelCompleteMenu.style.display = 'none';
+            startMenu.style.display = 'block';
+            startButton.disabled = true;
+            updateHighScoreDisplay();
+        }
+
+        function updateHighScores() {
+            highScores.push({ score: score, difficulty: difficulty, level: currentLevel });
+            highScores.sort((a, b) => b.score - a.score);
+            highScores = highScores.slice(0, 5);
+            updateHighScoreDisplay();
+        }
+
+        function updateHighScoreDisplay() {
+            scoreList.innerHTML = '';
+            highScores.forEach(score => {
+                const li = document.createElement('li');
+                li.textContent = `${score.score} (${score.difficulty}, Level ${score.level})`;
+                scoreList.appendChild(li);
+            });
+        }
+
+        // Key controls
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                controlBird('up');
+            } else if (e.code === 'ArrowDown') {
+                controlBird('down');
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                controlBird('release');
+            }
+        });
+
+        // Initialize high score display
+        updateHighScoreDisplay();
+    </script>
+</body>
+</html>
